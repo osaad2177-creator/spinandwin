@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Industrial Tower — Spin & Win</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,"Tahoma",sans-serif}
+body{background:radial-gradient(circle at 50% 35%,#168cff 0,#0755ad 38%,#03285b 100%);color:#fff}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4vh 4vw;text-align:center}
+.hidden{display:none!important}
+.logo{position:absolute;top:4vh;right:4vw;max-width:210px;max-height:100px;object-fit:contain;filter:drop-shadow(0 5px 10px #001b45)}
+.title{font-size:clamp(42px,7vw,100px);font-weight:900;line-height:1;margin-bottom:18px}
+.subtitle{font-size:clamp(25px,3vw,48px);font-weight:700;margin-bottom:45px}
+button{border:0;border-radius:24px;background:#fff;color:#0755ad;font-size:clamp(28px,4vw,56px);font-weight:900;padding:22px 65px;min-width:280px;box-shadow:0 12px 30px #001b4566;cursor:pointer}
+button:active{transform:scale(.96)}
+.wheel-wrap{position:relative;width:min(72vw,72vh);height:min(72vw,72vh)}
+.pointer{position:absolute;z-index:5;top:-15px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:28px solid transparent;border-right:28px solid transparent;border-top:55px solid #fff;filter:drop-shadow(0 4px 6px #001b45)}
+#wheel{width:100%;height:100%;border-radius:50%;border:12px solid #fff;box-shadow:0 15px 50px #001b4588;transition:transform 4.5s cubic-bezier(.12,.7,.15,1)}
+.center{position:absolute;z-index:4;left:50%;top:50%;transform:translate(-50%,-50%);width:22%;height:22%;border-radius:50%;background:#fff;color:#0755ad;border:7px solid #168cff;display:flex;align-items:center;justify-content:center;font-size:clamp(18px,2.4vw,38px);font-weight:900;box-shadow:0 5px 20px #001b4566;pointer-events:none}
+.spin-btn{margin-top:25px;font-size:clamp(25px,3vw,42px);padding:16px 50px}
+.result-card{background:#ffffffee;color:#063d82;border-radius:36px;padding:40px 7vw;box-shadow:0 20px 60px #001b4588;max-width:90vw}
+.congrats{font-size:clamp(45px,7vw,95px);font-weight:900;color:#0755ad}
+.you-won{font-size:clamp(30px,4vw,55px);font-weight:800;margin:12px}
+.prize{font-size:clamp(42px,6vw,85px);font-weight:900;color:#0755ad;margin:18px 0}
+.collect{font-size:clamp(22px,2.7vw,40px);font-weight:700;margin:20px 0 30px}
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.confetti i{position:absolute;width:12px;height:25px;animation:fall 2.8s linear infinite;opacity:.9}
+@keyframes fall{0%{transform:translateY(-10vh) rotate(0)}100%{transform:translateY(110vh) rotate(720deg)}}
+.hint{font-size:20px;opacity:.8;margin-top:12px}
+@media(max-width:800px){.logo{max-width:140px}.wheel-wrap{width:78vw;height:78vw}}
+</style>
+</head>
+<body>
+
+<section id="welcome" class="screen">
+  <div id="logo"></div>
+  <div class="title">SPIN &amp; WIN</div>
+  <div class="subtitle">لف واربح هديتك 🎁</div>
+  <button id="startBtn">ابدأ اللعب</button>
+</section>
+
+<section id="game" class="screen hidden">
+  <div class="title" style="font-size:clamp(30px,4vw,55px);margin-bottom:15px">لف واربح</div>
+  <div class="wheel-wrap">
+    <div class="pointer"></div>
+    <canvas id="wheel"></canvas>
+    <div class="center">SPIN</div>
+  </div>
+  <button id="spinBtn" class="spin-btn">لف العجلة</button>
+  <div class="hint">اضغط مرة واحدة فقط</div>
+</section>
+
+<section id="result" class="screen hidden">
+  <div class="confetti" id="confetti"></div>
+  <div class="result-card">
+    <div class="congrats">مبروك! 🎉</div>
+    <div class="you-won">كسبت</div>
+    <div id="prizeText" class="prize"></div>
+    <div class="collect">استلم هديتك من فريقنا</div>
+    <button id="newBtn">لاعب جديد</button>
+  </div>
+</section>
+
+<script>
+const prizes = [
+  {ar:"عدد 2 كرتونة", color:"#eaf7ff"},
+  {ar:"عدد 3 كرتونة", color:"#cfeaff"},
+  {ar:"عدد 6 كرتونة", color:"#b7ddff"},
+  {ar:"عدد 10 كرتونة", color:"#8fc8ff"},
+  {ar:"كاش باك 10 جنيه", color:"#dceeff"}
+];
+
+const welcome = document.getElementById("welcome");
+const game = document.getElementById("game");
+const result = document.getElementById("result");
+const startBtn = document.getElementById("startBtn");
+const spinBtn = document.getElementById("spinBtn");
+const newBtn = document.getElementById("newBtn");
+const prizeText = document.getElementById("prizeText");
+const canvas = document.getElementById("wheel");
+const ctx = canvas.getContext("2d");
+
+let spinning = false;
+let currentRotation = 0;
+
+function resizeWheel(){
+  const rect = canvas.getBoundingClientRect();
+  const d = Math.min(rect.width, rect.height);
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = d * ratio;
+  canvas.height = d * ratio;
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  drawWheel(d);
+}
+function drawWheel(d){
+  const cx=d/2, cy=d/2, r=d/2-6;
+  ctx.clearRect(0,0,d,d);
+  const slice = Math.PI*2/prizes.length;
+  for(let i=0;i<prizes.length;i++){
+    const a0=-Math.PI/2+i*slice, a1=a0+slice;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a0,a1);ctx.closePath();
+    ctx.fillStyle=prizes[i].color;ctx.fill();
+    ctx.strokeStyle="#0755ad";ctx.lineWidth=4;ctx.stroke();
+
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(a0+slice/2);
+    ctx.fillStyle="#073d82";ctx.font=`900 ${Math.max(17,d*.045)}px Arial`;
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    const parts=prizes[i].ar.split(" ");
+    if(parts.length>3){
+      ctx.fillText(parts.slice(0,3).join(" "),r*.62,0);
+      ctx.fillText(parts.slice(3).join(" "),r*.62,Math.max(25,d*.055));
+    }else ctx.fillText(prizes[i].ar,r*.62,0);
+    ctx.restore();
+  }
+}
+window.addEventListener("resize",resizeWheel);
+
+startBtn.onclick=()=>{
+  welcome.classList.add("hidden");
+  result.classList.add("hidden");
+  game.classList.remove("hidden");
+  setTimeout(resizeWheel,50);
+};
+
+spinBtn.onclick=()=>{
+  if(spinning) return;
+  spinning=true;
+  spinBtn.disabled=true;
+
+  // Select the prize first, then rotate the wheel to that segment.
+  const winner = Math.floor(Math.random()*prizes.length);
+  const sliceDeg=360/prizes.length;
+  const targetCenter=winner*sliceDeg+sliceDeg/2;
+  const extra=360*5;
+  const desired=(360-targetCenter+360)%360;
+  currentRotation += extra + desired - (currentRotation%360);
+
+  canvas.style.transform=`rotate(${currentRotation}deg)`;
+
+  setTimeout(()=>{
+    prizeText.textContent=prizes[winner].ar;
+    game.classList.add("hidden");
+    result.classList.remove("hidden");
+    makeConfetti();
+    spinning=false;
+    spinBtn.disabled=false;
+  },4600);
+};
+
+newBtn.onclick=()=>{
+  result.classList.add("hidden");
+  welcome.classList.remove("hidden");
+};
+
+function makeConfetti(){
+  const box=document.getElementById("confetti");
+  box.innerHTML="";
+  for(let i=0;i<55;i++){
+    const el=document.createElement("i");
+    el.style.left=Math.random()*100+"%";
+    el.style.top=(-Math.random()*30)+"%";
+    el.style.background=["#fff","#22aaff","#0755ad","#8fd5ff"][i%4];
+    el.style.animationDelay=(Math.random()*1.5)+"s";
+    el.style.transform=`rotate(${Math.random()*360}deg)`;
+    box.appendChild(el);
+  }
+}
+</script>
+</body>
+</html>
